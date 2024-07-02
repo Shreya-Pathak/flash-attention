@@ -317,7 +317,12 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
             acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
             smem_thr_copy_Q, smem_thr_copy_K
         );
-        // if (cute::thread0()) { print(acc_s); }
+
+        if (cute::thread0()) { print(acc_s); }
+        if (params.apply_softcap){
+            flash:apply_softcap<>(acc_s, params.softcap)
+        }
+        if (cute::thread0()) { print(acc_s); }
 
         mask.template apply_mask<Is_causal, Is_even_MN>(
             acc_s, n_block * kBlockN, m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4, kNWarps * 16
@@ -390,6 +395,12 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
             // isn't right and we get race conditions.
             cute::cp_async_fence();
         }
+
+        if (cute::thread0()) { print(acc_s); }
+        if (params.apply_softcap){
+            flash:apply_softcap<>(acc_s, params.softcap)
+        }
+        if (cute::thread0()) { print(acc_s); }
 
         mask.template apply_mask</*Causal_mask=*/false>(
             acc_s, n_block * kBlockN, m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4, kNWarps * 16
@@ -871,6 +882,12 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
         );
         // if (cute::thread0()) { print(acc_s); }
 
+        if (cute::thread0()) { print(acc_s); }
+        if (params.apply_softcap){
+            flash:apply_softcap<>(acc_s, params.softcap)
+        }
+        if (cute::thread0()) { print(acc_s); }
+
         mask.template apply_mask<Is_causal, Is_even_MN>(
             acc_s, n_block * kBlockN, m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4, kNWarps * 16
         );
@@ -941,6 +958,12 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
             acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
             smem_thr_copy_Q, smem_thr_copy_K
         );
+
+        if (cute::thread0()) { print(acc_s); }
+        if (params.apply_softcap){
+            flash:apply_softcap<>(acc_s, params.softcap)
+        }
+        if (cute::thread0()) { print(acc_s); }
 
         flash::cp_async_wait<0>();
         __syncthreads();

@@ -44,6 +44,8 @@ void set_params_fprop(Flash_fwd_params &params,
                       int window_size_left,
                       int window_size_right,
                       bool seqlenq_ngroups_swapped=false,
+                      bool apply_softcap=false,
+                      float softcap=1.0,
                       const bool unpadded_lse=false) {
 
     // Reset the parameters
@@ -139,6 +141,9 @@ void set_params_fprop(Flash_fwd_params &params,
 
     params.unpadded_lse = unpadded_lse;
     params.seqlenq_ngroups_swapped = seqlenq_ngroups_swapped;
+
+    params.apply_softcap = apply_softcap;
+    params.softcap = softcap;
 }
 
 void set_params_dgrad(Flash_bwd_params &params,
@@ -188,6 +193,8 @@ void set_params_dgrad(Flash_bwd_params &params,
                      window_size_left,
                      window_size_right,
                      false, // seqlenq_ngroups_swapped
+                     false, // apply_softcap
+                     1.0,  // softcap
                      unpadded_lse);
 
     // Set the pointers and strides.
@@ -333,6 +340,8 @@ mha_fwd(at::Tensor &q,         // batch_size x seqlen_q x num_heads x head_size
         int window_size_left,
         int window_size_right,
         const bool return_softmax,
+        bool apply_softcap,
+        float softcap,
         c10::optional<at::Generator> gen_) {
 
     auto dprops = at::cuda::getCurrentDeviceProperties();
@@ -453,7 +462,10 @@ mha_fwd(at::Tensor &q,         // batch_size x seqlen_q x num_heads x head_size
                      p_dropout,
                      softmax_scale,
                      window_size_left,
-                     window_size_right);
+                     window_size_right,
+                     /**/false,
+                     apply_softcap,
+                     softcap);
 
 
     set_params_splitkv(params, batch_size, num_heads,
@@ -522,6 +534,8 @@ mha_varlen_fwd(at::Tensor &q,  // total_q x num_heads x head_size, total_q := \s
                int window_size_left,
                int window_size_right,
                const bool return_softmax,
+               bool apply_softcap,
+               float softcap,
                c10::optional<at::Generator> gen_) {
 
     auto dprops = at::cuda::getCurrentDeviceProperties();
@@ -689,6 +703,8 @@ mha_varlen_fwd(at::Tensor &q,  // total_q x num_heads x head_size, total_q := \s
                      window_size_left,
                      window_size_right,
                      seqlenq_ngroups_swapped,
+                     apply_softcap,
+                     softcap,
                      /*unpadded_lse*/true);
     params.total_q = total_q;
 
@@ -1258,7 +1274,9 @@ mha_fwd_kvcache(at::Tensor &q,                 // batch_size x seqlen_q x num_he
                 int window_size_left,
                 int window_size_right,
                 bool is_rotary_interleaved,   // if true, rotary combines indices 0 & 1, else indices 0 & rotary_dim / 2
-                int num_splits
+                int num_splits,
+                bool apply_softcap,
+                float softcap
                 ) {
 
     auto dprops = at::cuda::getCurrentDeviceProperties();
@@ -1392,7 +1410,10 @@ mha_fwd_kvcache(at::Tensor &q,                 // batch_size x seqlen_q x num_he
                      /*p_dropout=*/0.f,
                      softmax_scale,
                      window_size_left,
-                     window_size_right);
+                     window_size_right,
+                     /*seqlenq_ngroups_swapped=*/false,
+                     apply_softcap,
+                     softcap);
 
     at::Tensor k, v, k_padded, v_padded;
     if (k_.has_value()) {
