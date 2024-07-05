@@ -14,6 +14,7 @@
 #include "kernel_traits.h"
 #include "utils.h"
 #include "softmax.h"
+#include "softcap.h"
 #include "mask.h"
 #include "dropout.h"
 #include "rotary.h"
@@ -318,11 +319,11 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
             smem_thr_copy_Q, smem_thr_copy_K
         );
 
-        if (cute::thread0()) { print(acc_s); }
+        if (cute::thread0()) { print(acc_s); print(acc_s(0, 0, 0));}
         if (params.apply_softcap){
-            flash:apply_softcap<>(acc_s, params.softcap)
+            flash::apply_softcap(acc_s, params.softcap_scale);
         }
-        if (cute::thread0()) { print(acc_s); }
+        if (cute::thread0()) { print(acc_s); print(acc_s(0, 0, 0));}
 
         mask.template apply_mask<Is_causal, Is_even_MN>(
             acc_s, n_block * kBlockN, m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4, kNWarps * 16
@@ -396,11 +397,9 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
             cute::cp_async_fence();
         }
 
-        if (cute::thread0()) { print(acc_s); }
         if (params.apply_softcap){
-            flash:apply_softcap<>(acc_s, params.softcap)
+            flash::apply_softcap(acc_s, params.softcap_scale);
         }
-        if (cute::thread0()) { print(acc_s); }
 
         mask.template apply_mask</*Causal_mask=*/false>(
             acc_s, n_block * kBlockN, m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4, kNWarps * 16
@@ -882,11 +881,9 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
         );
         // if (cute::thread0()) { print(acc_s); }
 
-        if (cute::thread0()) { print(acc_s); }
         if (params.apply_softcap){
-            flash:apply_softcap<>(acc_s, params.softcap)
+            flash::apply_softcap(acc_s, params.softcap_scale);
         }
-        if (cute::thread0()) { print(acc_s); }
 
         mask.template apply_mask<Is_causal, Is_even_MN>(
             acc_s, n_block * kBlockN, m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4, kNWarps * 16
@@ -959,11 +956,9 @@ inline __device__ void compute_attn_1rowblock_splitkv(const Params &params, cons
             smem_thr_copy_Q, smem_thr_copy_K
         );
 
-        if (cute::thread0()) { print(acc_s); }
         if (params.apply_softcap){
-            flash:apply_softcap<>(acc_s, params.softcap)
+            flash::apply_softcap(acc_s, params.softcap_scale);
         }
-        if (cute::thread0()) { print(acc_s); }
 
         flash::cp_async_wait<0>();
         __syncthreads();

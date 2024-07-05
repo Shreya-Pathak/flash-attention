@@ -102,8 +102,9 @@ void set_params_fprop(Flash_fwd_params &params,
     params.d_rounded = d_rounded;
 
     // Set the different scale values.
-    params.scale_softmax = softmax_scale;
-    params.scale_softmax_log2 = softmax_scale * M_LOG2E;
+    float rescale_factor = apply_softcap ? softcap : softmax_scale;
+    params.scale_softmax = rescale_factor;
+    params.scale_softmax_log2 = rescale_factor * M_LOG2E;
 
     // Set this to probability of keeping an element to simplify things.
     params.p_dropout = 1.f - p_dropout;
@@ -143,7 +144,7 @@ void set_params_fprop(Flash_fwd_params &params,
     params.seqlenq_ngroups_swapped = seqlenq_ngroups_swapped;
 
     params.apply_softcap = apply_softcap;
-    params.softcap = softcap;
+    params.softcap_scale = softmax_scale / softcap;
 }
 
 void set_params_dgrad(Flash_bwd_params &params,
@@ -340,8 +341,6 @@ mha_fwd(at::Tensor &q,         // batch_size x seqlen_q x num_heads x head_size
         int window_size_left,
         int window_size_right,
         const bool return_softmax,
-        bool apply_softcap,
-        float softcap,
         c10::optional<at::Generator> gen_) {
 
     auto dprops = at::cuda::getCurrentDeviceProperties();
@@ -463,9 +462,7 @@ mha_fwd(at::Tensor &q,         // batch_size x seqlen_q x num_heads x head_size
                      softmax_scale,
                      window_size_left,
                      window_size_right,
-                     /**/false,
-                     apply_softcap,
-                     softcap);
+                     /**/false);
 
 
     set_params_splitkv(params, batch_size, num_heads,
@@ -534,8 +531,6 @@ mha_varlen_fwd(at::Tensor &q,  // total_q x num_heads x head_size, total_q := \s
                int window_size_left,
                int window_size_right,
                const bool return_softmax,
-               bool apply_softcap,
-               float softcap,
                c10::optional<at::Generator> gen_) {
 
     auto dprops = at::cuda::getCurrentDeviceProperties();
@@ -703,8 +698,8 @@ mha_varlen_fwd(at::Tensor &q,  // total_q x num_heads x head_size, total_q := \s
                      window_size_left,
                      window_size_right,
                      seqlenq_ngroups_swapped,
-                     apply_softcap,
-                     softcap,
+                     false, // apply_softcap
+                     1.0,  // softcap
                      /*unpadded_lse*/true);
     params.total_q = total_q;
 

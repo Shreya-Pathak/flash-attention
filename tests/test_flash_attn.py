@@ -218,6 +218,8 @@ def attention_ref(
     window_size=(-1, -1),  # -1 means infinite window size
     upcast=True,
     reorder_ops=False,
+    apply_softcap=False,
+    softcap=1.0,
 ):
     """
     Arguments:
@@ -253,6 +255,8 @@ def attention_ref(
         scores = torch.einsum("bthd,bshd->bhts", q / math.sqrt(d), k)
     else:
         scores = torch.einsum("bthd,bshd->bhts", q, k / math.sqrt(d))
+    if apply_softcap:
+        scores = torch.tanh(scores / softcap) * softcap
     if key_padding_mask is not None:
         scores.masked_fill_(rearrange(~key_padding_mask, "b s -> b 1 1 s"), float("-inf"))
     if window_size[0] >= 0 or window_size[1] >= 0:
@@ -1821,6 +1825,8 @@ def test_flash_attn_splitkv(
 # @pytest.mark.parametrize("mha_type", ["mha"])
 @pytest.mark.parametrize("new_kv", [False, True])
 # @pytest.mark.parametrize("new_kv", [False])
+@pytest.mark.parametrize("apply_softcap", [False, True])
+# @pytest.mark.parametrize("apply_softcap", [False])
 @pytest.mark.parametrize("alibi", [False, True])
 # @pytest.mark.parametrize("alibi", [False])
 @pytest.mark.parametrize("local", [False, True])
@@ -1872,6 +1878,7 @@ def test_flash_attn_kvcache(
     causal,
     local,
     alibi,
+    apply_softcap,
     new_kv,
     mha_type,
     num_splits,
@@ -2011,6 +2018,8 @@ def test_flash_attn_kvcache(
         rotary_interleaved=rotary_interleaved,
         alibi_slopes=alibi_slopes,
         num_splits=num_splits,
+        apply_softcap=apply_softcap,
+        softcap=30.0,
     )
     # out = flash_attn_with_kvcache(
     #     q, k_cache, v_cache, cache_seqlens=cache_seqlens, causal=causal, window_size=window_size
@@ -2033,6 +2042,8 @@ def test_flash_attn_kvcache(
         None,
         causal=causal,
         window_size=window_size,
+        apply_softcap=apply_softcap,
+        softcap=30.0,
     )
     out_pt, _ = attention_ref(
         q_ro,
@@ -2047,6 +2058,8 @@ def test_flash_attn_kvcache(
         window_size=window_size,
         upcast=False,
         reorder_ops=True,
+        apply_softcap=apply_softcap,
+        softcap=30.0,
     )
     print(f"Output max diff: {(out - out_ref).abs().max().item()}")
     print(f"Output mean diff: {(out - out_ref).abs().mean().item()}")

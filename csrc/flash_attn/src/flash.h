@@ -143,7 +143,7 @@ struct Flash_fwd_params : public Qkv_params {
     bool seqlenq_ngroups_swapped;  // q has been transposed from (b, 1, (nheads_kv ngroups), d) to (b, ngroups, nheads_kv, d).
 
     bool apply_softcap;
-    float softcap;
+    float softcap_scale;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

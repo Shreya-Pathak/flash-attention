@@ -44,7 +44,7 @@ def _get_block_size_n(device, head_dim, is_dropout, is_causal):
 
 
 def _flash_attn_forward(
-    q, k, v, dropout_p, softmax_scale, causal, window_size, alibi_slopes, return_softmax, apply_softcap, softcap
+    q, k, v, dropout_p, softmax_scale, causal, window_size, alibi_slopes, return_softmax
 ):
     maybe_contiguous = lambda x: x.contiguous() if x.stride(-1) != 1 else x
     q, k, v = [maybe_contiguous(x) for x in (q, k, v)]
@@ -60,8 +60,6 @@ def _flash_attn_forward(
         window_size[0],
         window_size[1],
         return_softmax,
-        apply_softcap,
-        softcap,
         None,
     )
     return out, q, k, v, out_padded, softmax_lse, S_dmask, rng_state
@@ -81,8 +79,6 @@ def _flash_attn_varlen_forward(
     window_size,
     alibi_slopes,
     return_softmax,
-    apply_softcap,
-    softcap,
     block_table,
 ):
     maybe_contiguous = lambda x: x.contiguous() if x.stride(-1) != 1 else x
@@ -106,8 +102,6 @@ def _flash_attn_varlen_forward(
         window_size[0],
         window_size[1],
         return_softmax,
-        apply_softcap,
-        softcap,
         None,
     )
     # if out.isnan().any() or softmax_lse.isnan().any():
@@ -236,8 +230,6 @@ class FlashAttnQKVPackedFunc(torch.autograd.Function):
         alibi_slopes,
         deterministic,
         return_softmax,
-        apply_softcap,
-        softcap,
     ):
         if softmax_scale is None:
             softmax_scale = qkv.shape[-1] ** (-0.5)
@@ -251,8 +243,6 @@ class FlashAttnQKVPackedFunc(torch.autograd.Function):
             window_size=window_size,
             alibi_slopes=alibi_slopes,
             return_softmax=return_softmax and dropout_p > 0,
-            apply_softcap=apply_softcap,
-            softcap=softcap,
         )
         ctx.save_for_backward(q, k, v, out_padded, softmax_lse, rng_state)
         ctx.dropout_p = dropout_p
@@ -304,8 +294,6 @@ class FlashAttnVarlenQKVPackedFunc(torch.autograd.Function):
         alibi_slopes,
         deterministic,
         return_softmax,
-        apply_softcap,
-        softcap,
     ):
         if softmax_scale is None:
             softmax_scale = qkv.shape[-1] ** (-0.5)
@@ -324,8 +312,6 @@ class FlashAttnVarlenQKVPackedFunc(torch.autograd.Function):
             alibi_slopes=alibi_slopes,
             return_softmax=return_softmax and dropout_p > 0,
             block_table=None,
-            apply_softcap=apply_softcap,
-            softcap=softcap
         )
         ctx.save_for_backward(q, k, v, out_padded, softmax_lse, cu_seqlens, rng_state)
         ctx.dropout_p = dropout_p
@@ -381,8 +367,6 @@ class FlashAttnKVPackedFunc(torch.autograd.Function):
         alibi_slopes,
         deterministic,
         return_softmax,
-        apply_softcap,
-        softcap,
     ):
         if softmax_scale is None:
             softmax_scale = q.shape[-1] ** (-0.5)
@@ -396,8 +380,6 @@ class FlashAttnKVPackedFunc(torch.autograd.Function):
             window_size=window_size,
             alibi_slopes=alibi_slopes,
             return_softmax=return_softmax and dropout_p > 0,
-            apply_softcap=apply_softcap,
-            softcap=softcap,
         )
         ctx.save_for_backward(q, k, v, out_padded, softmax_lse, rng_state)
         ctx.dropout_p = dropout_p
@@ -454,8 +436,6 @@ class FlashAttnVarlenKVPackedFunc(torch.autograd.Function):
         alibi_slopes,
         deterministic,
         return_softmax,
-        apply_softcap,
-        softcap,
     ):
         if softmax_scale is None:
             softmax_scale = q.shape[-1] ** (-0.5)
@@ -474,8 +454,6 @@ class FlashAttnVarlenKVPackedFunc(torch.autograd.Function):
             alibi_slopes=alibi_slopes,
             return_softmax=return_softmax and dropout_p > 0,
             block_table=None,
-            apply_softcap=apply_softcap,
-            softcap=softcap,
         )
         ctx.save_for_backward(
             q, k, v, out_padded, softmax_lse, cu_seqlens_q, cu_seqlens_k, rng_state
@@ -537,8 +515,6 @@ class FlashAttnFunc(torch.autograd.Function):
         alibi_slopes,
         deterministic,
         return_softmax,
-        apply_softcap,
-        softcap,
     ):
         if softmax_scale is None:
             softmax_scale = q.shape[-1] ** (-0.5)
@@ -552,8 +528,6 @@ class FlashAttnFunc(torch.autograd.Function):
             window_size=window_size,
             alibi_slopes=alibi_slopes,
             return_softmax=return_softmax and dropout_p > 0,
-            apply_softcap=apply_softcap,
-            softcap=softcap,
         )
         ctx.save_for_backward(q, k, v, out_padded, softmax_lse, rng_state)
         ctx.dropout_p = dropout_p
@@ -611,8 +585,6 @@ class FlashAttnVarlenFunc(torch.autograd.Function):
         deterministic,
         return_softmax,
         block_table,
-        apply_softcap,
-        softcap,
     ):
         if softmax_scale is None:
             softmax_scale = q.shape[-1] ** (-0.5)
@@ -631,8 +603,6 @@ class FlashAttnVarlenFunc(torch.autograd.Function):
             alibi_slopes=alibi_slopes,
             return_softmax=return_softmax and dropout_p > 0,
             block_table=block_table,
-            apply_softcap=apply_softcap,
-            softcap=softcap
         )
         ctx.save_for_backward(
             q, k, v, out_padded, softmax_lse, cu_seqlens_q, cu_seqlens_k, rng_state
@@ -688,8 +658,6 @@ def flash_attn_qkvpacked_func(
     alibi_slopes=None,
     deterministic=False,
     return_attn_probs=False,
-    apply_softcap=False,
-    softcap=1.0,
 ):
     """dropout_p should be set to 0.0 during evaluation
     If Q, K, V are already stacked into 1 tensor, this function will be faster than
@@ -733,8 +701,6 @@ def flash_attn_qkvpacked_func(
         alibi_slopes,
         deterministic,
         return_attn_probs,
-        apply_softcap,
-        softcap,
     )
 
 
@@ -748,8 +714,6 @@ def flash_attn_kvpacked_func(
     alibi_slopes=None,
     deterministic=False,
     return_attn_probs=False,
-    apply_softcap=False,
-    softcap=1.0,
 ):
     """dropout_p should be set to 0.0 during evaluation
     If K, V are already stacked into 1 tensor, this function will be faster than
@@ -811,8 +775,6 @@ def flash_attn_kvpacked_func(
         alibi_slopes,
         deterministic,
         return_attn_probs,
-        apply_softcap,
-        softcap,
     )
 
 
@@ -827,8 +789,6 @@ def flash_attn_func(
     alibi_slopes=None,
     deterministic=False,
     return_attn_probs=False,
-    apply_softcap=False,
-    softcap=1.0,
 ):
     """dropout_p should be set to 0.0 during evaluation
     Supports multi-query and grouped-query attention (MQA/GQA) by passing in KV with fewer heads
@@ -889,8 +849,6 @@ def flash_attn_func(
         alibi_slopes,
         deterministic,
         return_attn_probs,
-        apply_softcap,
-        softcap,
     )
 
 
@@ -905,8 +863,6 @@ def flash_attn_varlen_qkvpacked_func(
     alibi_slopes=None,
     deterministic=False,
     return_attn_probs=False,
-    apply_softcap=False,
-    softcap=1.0,
 ):
     """dropout_p should be set to 0.0 during evaluation
     If Q, K, V are already stacked into 1 tensor, this function will be faster than
@@ -955,8 +911,6 @@ def flash_attn_varlen_qkvpacked_func(
         alibi_slopes,
         deterministic,
         return_attn_probs,
-        apply_softcap,
-        softcap,
     )
 
 
@@ -974,8 +928,6 @@ def flash_attn_varlen_kvpacked_func(
     alibi_slopes=None,
     deterministic=False,
     return_attn_probs=False,
-    apply_softcap=False,
-    softcap=1.0,
 ):
     """dropout_p should be set to 0.0 during evaluation
     If K, V are already stacked into 1 tensor, this function will be faster than
@@ -1047,8 +999,6 @@ def flash_attn_varlen_kvpacked_func(
         alibi_slopes,
         deterministic,
         return_attn_probs,
-        apply_softcap,
-        softcap,
     )
 
 
@@ -1068,8 +1018,6 @@ def flash_attn_varlen_func(
     deterministic=False,
     return_attn_probs=False,
     block_table=None,
-    apply_softcap=False,
-    softcap=1.0,
 ):
     """dropout_p should be set to 0.0 during evaluation
     Supports multi-query and grouped-query attention (MQA/GQA) by passing in K, V with fewer heads
@@ -1141,8 +1089,6 @@ def flash_attn_varlen_func(
         deterministic,
         return_attn_probs,
         block_table,
-        apply_softcap,
-        softcap,
     )
 
 
